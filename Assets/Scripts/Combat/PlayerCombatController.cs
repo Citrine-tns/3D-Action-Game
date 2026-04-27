@@ -21,9 +21,14 @@ public class PlayerCombatController : MonoBehaviour
 
     private void Start()
     {
-        // Hitbox は最初は無効
-        hitbox.gameObject.SetActive(false);
-        hitbox.owner = this;
+        comboRunner.weapon = weapon;
+
+        // WeaponHolder がある場合は Hitbox の初期化はそちらに任せる
+        if (hitbox != null)
+        {
+            hitbox.gameObject.SetActive(false);
+            hitbox.owner = this;
+        }
     }
 
     private void Update()
@@ -34,6 +39,7 @@ public class PlayerCombatController : MonoBehaviour
         }
 
         // ComboRunner の状態に応じて Hitbox を切り替え
+        if (hitbox == null) return;
         bool shouldBeActive = comboRunner.CurrentState == ComboRunner.State.Active;
         if (hitbox.gameObject.activeSelf != shouldBeActive)
         {

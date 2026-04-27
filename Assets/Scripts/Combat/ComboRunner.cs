@@ -15,11 +15,12 @@ public class ComboRunner : MonoBehaviour
 
     [Header("References")]
     public ComboPreset currentPreset;
+    public WeaponData weapon;
 
     public State CurrentState { get; private set; } = State.Idle;
     public int CurrentNodeIndex { get; private set; } = -1;
     public ComboNodeData CurrentNode =>
-        (CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.nodes.Count)
+        (currentPreset != null && CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.nodes.Count)
             ? currentPreset.nodes[CurrentNodeIndex]
             : null;
 
@@ -105,11 +106,10 @@ public class ComboRunner : MonoBehaviour
     private void EnterActive()
     {
         CurrentState = State.Active;
-        stateTimer = CurrentNode.motionDuration;
+        stateTimer = CurrentNode.motionDuration / GetSpeedMultiplier();
         attackBuffered = false;
 
         // TODO: アニメーション再生
-        // TODO: 攻撃判定の有効化
     }
 
     private void EnterRecovery()
@@ -117,19 +117,24 @@ public class ComboRunner : MonoBehaviour
         bool isFinalNode = (CurrentNodeIndex >= currentPreset.nodes.Count - 1);
 
         CurrentState = State.Recovery;
+        float speed = GetSpeedMultiplier();
 
         if (isFinalNode)
         {
             // 最終ノード：入力受付なし、硬直のみ
-            stateTimer = CurrentNode.recoveryDuration;
+            stateTimer = CurrentNode.recoveryDuration / speed;
         }
         else
         {
             // 途中ノード：入力受付窓あり
-            stateTimer = CurrentNode.inputWindowDuration;
+            stateTimer = CurrentNode.inputWindowDuration / speed;
         }
+    }
 
-        // TODO: 攻撃判定の無効化
+    private float GetSpeedMultiplier()
+    {
+        // attackSpeed: 1.0 = 標準, 1.5 = 1.5倍速, 0.6 = 遅い
+        return (weapon != null && weapon.attackSpeed > 0f) ? weapon.attackSpeed : 1f;
     }
 
     private void ReturnToIdle()

@@ -35,6 +35,7 @@ public class LockOnController : MonoBehaviour
     public bool IsStrafing => CurrentState == LockState.Strafe || CurrentState == LockState.Locked;
 
     private readonly List<Transform> candidates = new();
+    private readonly Collider[] overlapBuffer = new Collider[32];
     private Transform lastReleasedTarget;
     private float graceTimer;
 
@@ -95,7 +96,6 @@ public class LockOnController : MonoBehaviour
     {
         if (CurrentTarget == null)
         {
-            CurrentTarget = null;
             cameraController.ExitLockOnKeepCurrentView();
             CurrentState = LockState.Strafe;
             return;
@@ -155,15 +155,6 @@ public class LockOnController : MonoBehaviour
         }
     }
 
-    private void LoseLockToStrafe()
-    {
-        lastReleasedTarget = CurrentTarget;
-        CurrentTarget = null;
-
-        cameraController.ExitLockOnKeepCurrentView();
-        CurrentState = LockState.Strafe;
-    }
-
     private bool TryAcquireTarget(Transform skipTarget)
     {
         RefreshCandidates();
@@ -189,10 +180,12 @@ public class LockOnController : MonoBehaviour
     {
         candidates.Clear();
 
-        Collider[] hits = Physics.OverlapSphere(player.position, searchRadius, targetMask);
+        int hitCount = Physics.OverlapSphereNonAlloc(
+            player.position, searchRadius, overlapBuffer, targetMask);
 
-        foreach (var hit in hits)
+        for (int i = 0; i < hitCount; i++)
         {
+            Collider hit = overlapBuffer[i];
             if (!hit.CompareTag(targetTag))
                 continue;
 

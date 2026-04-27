@@ -59,7 +59,11 @@ public class PlayerInputReader : MonoBehaviour
         input.Disable();
         attackAction.Disable();
     }
-    private void OnDestroy() => input?.Dispose();
+    private void OnDestroy()
+    {
+        input?.Dispose();
+        attackAction?.Dispose();
+    }
 
     private void LateUpdate()
     {

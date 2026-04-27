@@ -25,6 +25,11 @@ public class WeaponData : ScriptableObject
     public float backAttackMultiplier = 1f;
     public bool canStun;
 
+    [Header("仮モデル（見た目）")]
+    public Vector3 modelScale = new(0.15f, 1.2f, 0.15f);
+    public Vector3 modelOffset = new(0f, 0.6f, 0f);
+    public Color modelColor = Color.white;
+
     [Header("所属ノード一覧（この武器で使える全ノード）")]
     public ComboNodeData[] availableNodes;
 }
