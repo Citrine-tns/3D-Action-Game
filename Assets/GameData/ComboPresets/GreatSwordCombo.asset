@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 60c74eeda68d74cebb039e1bc195a5b2, type: 3}
-  m_Name: GreatSwordBasicCombo
+  m_Name: GreatSwordCombo
   m_EditorClassIdentifier: Assembly-CSharp::ComboPreset
   weapon: {fileID: 11400000, guid: edea4089440ba4039ac17716938b1bd7, type: 2}
   nodes:

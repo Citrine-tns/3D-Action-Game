@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b48c6d7b0f2c437d9398a9b9b6760c2, type: 3}
-  m_Name: SwingDown
+  m_Name: RisingSlash_GSowrd
   m_EditorClassIdentifier: Assembly-CSharp::ComboNodeData
-  nodeName: "\u632F\u308A\u4E0B\u308D\u3057"
+  nodeName: "\u65AC\u308A\u4E0A\u3052"
   weaponType: 0
-  startPosition: 0
-  endPosition: 1
+  startPosition: 1
+  endPosition: 0
   damageMultiplier: 1
   motionDuration: 0.5
   recoveryDuration: 0.3

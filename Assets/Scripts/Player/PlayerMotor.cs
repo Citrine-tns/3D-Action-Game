@@ -7,6 +7,7 @@ public class PlayerMotor : MonoBehaviour
     public Transform cameraPivot;
     public LockOnController lockOn;
     public PlayerInputReader input;
+    public ComboRunner comboRunner;
 
     [Header("Movement")]
     public float moveSpeed = 6f;
@@ -21,18 +22,27 @@ public class PlayerMotor : MonoBehaviour
         controller = GetComponent<CharacterController>();
     }
 
+    private bool IsComboActive =>
+        comboRunner != null && comboRunner.CurrentState != ComboRunner.State.Idle;
+
     private void Update()
     {
-        Vector2 moveInput = input.Move;
+        Vector3 moveDir = Vector3.zero;
 
-        Vector3 moveDir = lockOn.IsStrafing
-            ? GetMoveRelativeToPlayer(moveInput)
-            : GetMoveRelativeToCamera(moveInput);
+        if (!IsComboActive)
+        {
+            Vector2 moveInput = input.Move;
 
-        if (moveDir.sqrMagnitude > 1f)
-            moveDir.Normalize();
+            moveDir = lockOn.IsStrafing
+                ? GetMoveRelativeToPlayer(moveInput)
+                : GetMoveRelativeToCamera(moveInput);
 
-        HandleRotation(moveDir);
+            if (moveDir.sqrMagnitude > 1f)
+                moveDir.Normalize();
+
+            HandleRotation(moveDir);
+        }
+
         HandleMovement(moveDir);
     }
 
