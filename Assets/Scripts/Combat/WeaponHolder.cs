@@ -60,7 +60,7 @@ public class WeaponHolder : MonoBehaviour
 
         // スイングモーション
         var swing = currentWeaponObject.AddComponent<WeaponSwing>();
-        swing.Initialize(comboRunner, armR1Pivot, armR2Pivot);
+        swing.Initialize(comboRunner, armR1Pivot, armR2Pivot, combatController.gameObject);
 
         // Hitbox（当たり判定）— 武器オブジェクトの子なので一緒に振られる
         GameObject hitboxObj = new GameObject("Hitbox");

@@ -1,12 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// 武器の振りモーションを腕+手首の2レイヤーで表現する。
+/// 武器の振りモーションを制御する。
 ///
-/// レイヤー1: 右腕 (armR1Pivot=肩, armR2Pivot=肘) — 大きな弧
-/// レイヤー2: 武器 (transform) — 手首のスナップ・傾き
-///
-/// Idle 時の構えは WeaponData.basePose から読む。
+/// ComboNodeData に animationClip があればそれを再生、
+/// なければコード駆動（Bezier 曲線）でフォールバック。
 /// </summary>
 public class WeaponSwing : MonoBehaviour
 {
@@ -14,16 +12,19 @@ public class WeaponSwing : MonoBehaviour
     private Transform armR1Pivot;
     private Transform armR2Pivot;
     private Quaternion baseRotation;
+    private GameObject playerRoot;
     private ComboRunner.State lastState;
 
     private WeaponBasePose BasePose =>
         (comboRunner.weapon != null) ? comboRunner.weapon.basePose : default;
 
+    // コード駆動用
     private SwingPose armFrom;
     private SwingPose armMid;
     private SwingPose armTo;
     private float swingDuration;
     private float swingTimer;
+    private AnimationClip currentClip;
 
     private struct SwingPose
     {
@@ -31,11 +32,12 @@ public class WeaponSwing : MonoBehaviour
         public float yaw;
     }
 
-    public void Initialize(ComboRunner runner, Transform shoulder, Transform elbow)
+    public void Initialize(ComboRunner runner, Transform shoulder, Transform elbow, GameObject player)
     {
         comboRunner = runner;
         armR1Pivot = shoulder;
         armR2Pivot = elbow;
+        playerRoot = player;
         baseRotation = transform.localRotation;
 
         ApplyIdlePose();
@@ -61,18 +63,26 @@ public class WeaponSwing : MonoBehaviour
                 break;
 
             case ComboRunner.State.Recovery:
-                // 肩: 終端位置で保持
-                armR1Pivot.localRotation =
-                    Quaternion.AngleAxis(armTo.yaw, Vector3.up) *
-                    Quaternion.AngleAxis(armTo.pitch, Vector3.right);
-                // 肘: 伸ばしたまま保持
-                if (armR2Pivot != null)
-                    armR2Pivot.localRotation = Quaternion.Euler(-20f, 0f, 0f);
+                if (currentClip != null)
+                {
+                    // クリップの最終フレームで保持
+                    currentClip.SampleAnimation(playerRoot, currentClip.length);
+                }
+                else
+                {
+                    // コード駆動: 終端位置で保持
+                    armR1Pivot.localRotation =
+                        Quaternion.AngleAxis(armTo.yaw, Vector3.up) *
+                        Quaternion.AngleAxis(armTo.pitch, Vector3.right);
+                    if (armR2Pivot != null)
+                        armR2Pivot.localRotation = Quaternion.Euler(-20f, 0f, 0f);
+                }
                 break;
 
             default:
                 // Idle: 腕は PlayerWalkAnimation に任せる
                 // 武器だけ基本姿勢へ戻す
+                currentClip = null;
                 transform.localRotation = Quaternion.Slerp(
                     transform.localRotation,
                     baseRotation * Quaternion.Euler(BasePose.wrist),
@@ -81,9 +91,6 @@ public class WeaponSwing : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 基本姿勢を即座に適用する（装備時）。
-    /// </summary>
     private void ApplyIdlePose()
     {
         armR1Pivot.localRotation = Quaternion.Euler(BasePose.armR1);
@@ -105,27 +112,34 @@ public class WeaponSwing : MonoBehaviour
 
         swingDuration = node.motionDuration / speed;
         swingTimer = 0f;
+        currentClip = node.animationClip;
 
-        armFrom = PositionToArmPose(node.startPosition);
-        armTo = PositionToArmPose(node.endPosition);
-
-        armMid = new SwingPose
+        if (currentClip != null)
         {
-            pitch = -90f,
-            yaw = (armFrom.yaw + armTo.yaw) * 0.5f
-        };
+            // クリップの最初のフレームを適用
+            currentClip.SampleAnimation(playerRoot, 0f);
+        }
+        else
+        {
+            // コード駆動: Bezier 用のポーズ計算
+            armFrom = PositionToArmPose(node.startPosition);
+            armTo = PositionToArmPose(node.endPosition);
 
-        // 肩を始動位置へ
-        armR1Pivot.localRotation =
-            Quaternion.AngleAxis(armFrom.yaw, Vector3.up) *
-            Quaternion.AngleAxis(armFrom.pitch, Vector3.right);
+            armMid = new SwingPose
+            {
+                pitch = -90f,
+                yaw = (armFrom.yaw + armTo.yaw) * 0.5f
+            };
 
-        // 肘: 振りかぶり時は曲げる
-        if (armR2Pivot != null)
-            armR2Pivot.localRotation = Quaternion.Euler(-40f, 0f, 0f);
+            armR1Pivot.localRotation =
+                Quaternion.AngleAxis(armFrom.yaw, Vector3.up) *
+                Quaternion.AngleAxis(armFrom.pitch, Vector3.right);
 
-        // 手首
-        transform.localRotation = baseRotation * Quaternion.Euler(BasePose.wrist);
+            if (armR2Pivot != null)
+                armR2Pivot.localRotation = Quaternion.Euler(-40f, 0f, 0f);
+
+            transform.localRotation = baseRotation * Quaternion.Euler(BasePose.wrist);
+        }
     }
 
     private void UpdateSwing()
@@ -133,9 +147,16 @@ public class WeaponSwing : MonoBehaviour
         swingTimer += Time.deltaTime;
         float t = Mathf.Clamp01(swingTimer / swingDuration);
 
+        if (currentClip != null)
+        {
+            // AnimationClip で再生（クリップの長さを motionDuration に合わせてサンプリング）
+            currentClip.SampleAnimation(playerRoot, t * currentClip.length);
+            return;
+        }
+
+        // --- コード駆動 ---
         float eased = 1f - (1f - t) * (1f - t);
 
-        // --- 肩: Bezier 曲線 ---
         float oneMinusT = 1f - eased;
         float currentPitch = oneMinusT * oneMinusT * armFrom.pitch
                            + 2f * oneMinusT * eased * armMid.pitch
@@ -148,14 +169,12 @@ public class WeaponSwing : MonoBehaviour
             Quaternion.AngleAxis(currentYaw, Vector3.up) *
             Quaternion.AngleAxis(currentPitch, Vector3.right);
 
-        // --- 肘: 振りかぶり(曲げ) → 振り終わり(伸ばし) ---
         if (armR2Pivot != null)
         {
             float elbowAngle = Mathf.Lerp(-40f, -20f, eased);
             armR2Pivot.localRotation = Quaternion.Euler(elbowAngle, 0f, 0f);
         }
 
-        // --- 手首: スナップ ---
         float wristSnap = eased * 80f;
         transform.localRotation = baseRotation * Quaternion.Euler(
             BasePose.wrist.x + wristSnap,
@@ -163,9 +182,6 @@ public class WeaponSwing : MonoBehaviour
             BasePose.wrist.z);
     }
 
-    /// <summary>
-    /// NodePosition → 肩の構え角度
-    /// </summary>
     private static SwingPose PositionToArmPose(NodePosition pos)
     {
         return pos switch

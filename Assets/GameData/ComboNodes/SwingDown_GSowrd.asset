@@ -21,4 +21,4 @@ MonoBehaviour:
   recoveryDuration: 0.3
   inputWindowDuration: 0.4
   requiredLevel: 1
-  animationClip: {fileID: 0}
+  animationClip: {fileID: 7400000, guid: 5eee3d6a479994c7f85ce4664432315a, type: 2}
