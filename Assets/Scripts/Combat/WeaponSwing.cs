@@ -1,38 +1,49 @@
 using UnityEngine;
 
 /// <summary>
-/// 武器の振りモーションをコードで生成する。
-/// 全てのスイングは前方を経由する Bezier 曲線で補間。
+/// 武器の振りモーションを腕+手首の2レイヤーで表現する。
+///
+/// レイヤー1: 右腕 (armR1Pivot=肩, armR2Pivot=肘) — 大きな弧
+/// レイヤー2: 武器 (transform) — 手首のスナップ・傾き
+///
+/// Idle 時の構えは WeaponData.basePose から読む。
 /// </summary>
 public class WeaponSwing : MonoBehaviour
 {
-    [Header("待機")]
-    public Vector3 idleRotation = new(20f, -15f, 0f);
-
     private ComboRunner comboRunner;
+    private Transform armR1Pivot;
+    private Transform armR2Pivot;
+    private Quaternion baseRotation;
     private ComboRunner.State lastState;
 
-    private SwingPose poseFrom;
-    private SwingPose poseMid;
-    private SwingPose poseTo;
+    private WeaponBasePose BasePose =>
+        (comboRunner.weapon != null) ? comboRunner.weapon.basePose : default;
+
+    private SwingPose armFrom;
+    private SwingPose armMid;
+    private SwingPose armTo;
     private float swingDuration;
     private float swingTimer;
 
     private struct SwingPose
     {
-        public float x; // ピッチ: 0=上, 90=前, 180=下
-        public float y; // ヨー:   0=中央, 90=左, -90=右
+        public float pitch;
+        public float yaw;
     }
 
-    public void Initialize(ComboRunner runner)
+    public void Initialize(ComboRunner runner, Transform shoulder, Transform elbow)
     {
         comboRunner = runner;
-        transform.localRotation = Quaternion.Euler(idleRotation);
+        armR1Pivot = shoulder;
+        armR2Pivot = elbow;
+        baseRotation = transform.localRotation;
+
+        ApplyIdlePose();
     }
 
     private void Update()
     {
-        if (comboRunner == null) return;
+        if (comboRunner == null || armR1Pivot == null) return;
 
         var state = comboRunner.CurrentState;
 
@@ -50,22 +61,37 @@ public class WeaponSwing : MonoBehaviour
                 break;
 
             case ComboRunner.State.Recovery:
-                transform.localRotation =
-                    Quaternion.AngleAxis(poseTo.y, Vector3.up) *
-                    Quaternion.AngleAxis(poseTo.x, Vector3.right);
+                // 肩: 終端位置で保持
+                armR1Pivot.localRotation =
+                    Quaternion.AngleAxis(armTo.yaw, Vector3.up) *
+                    Quaternion.AngleAxis(armTo.pitch, Vector3.right);
+                // 肘: 伸ばしたまま保持
+                if (armR2Pivot != null)
+                    armR2Pivot.localRotation = Quaternion.Euler(-20f, 0f, 0f);
                 break;
 
             default:
-                // AngleAxis で待機角度を構築（他の状態と方式を統一）
-                Quaternion idleTarget =
-                    Quaternion.AngleAxis(idleRotation.y, Vector3.up) *
-                    Quaternion.AngleAxis(idleRotation.x, Vector3.right);
+                // Idle: 腕は PlayerWalkAnimation に任せる
+                // 武器だけ基本姿勢へ戻す
                 transform.localRotation = Quaternion.Slerp(
                     transform.localRotation,
-                    idleTarget,
+                    baseRotation * Quaternion.Euler(BasePose.wrist),
                     10f * Time.deltaTime);
                 break;
         }
+    }
+
+    /// <summary>
+    /// 基本姿勢を即座に適用する（装備時）。
+    /// </summary>
+    private void ApplyIdlePose()
+    {
+        armR1Pivot.localRotation = Quaternion.Euler(BasePose.armR1);
+
+        if (armR2Pivot != null)
+            armR2Pivot.localRotation = Quaternion.Euler(BasePose.armR2);
+
+        transform.localRotation = baseRotation * Quaternion.Euler(BasePose.wrist);
     }
 
     private void StartSwing()
@@ -80,19 +106,26 @@ public class WeaponSwing : MonoBehaviour
         swingDuration = node.motionDuration / speed;
         swingTimer = 0f;
 
-        poseFrom = PositionToPose(node.startPosition);
-        poseTo = PositionToPose(node.endPosition);
+        armFrom = PositionToArmPose(node.startPosition);
+        armTo = PositionToArmPose(node.endPosition);
 
-        // 経由点: 必ず前方(x=90)を通る。y は始動と終端の中間。
-        poseMid = new SwingPose
+        armMid = new SwingPose
         {
-            x = 90f,
-            y = (poseFrom.y + poseTo.y) * 0.5f
+            pitch = -90f,
+            yaw = (armFrom.yaw + armTo.yaw) * 0.5f
         };
 
-        transform.localRotation =
-            Quaternion.AngleAxis(poseFrom.y, Vector3.up) *
-            Quaternion.AngleAxis(poseFrom.x, Vector3.right);
+        // 肩を始動位置へ
+        armR1Pivot.localRotation =
+            Quaternion.AngleAxis(armFrom.yaw, Vector3.up) *
+            Quaternion.AngleAxis(armFrom.pitch, Vector3.right);
+
+        // 肘: 振りかぶり時は曲げる
+        if (armR2Pivot != null)
+            armR2Pivot.localRotation = Quaternion.Euler(-40f, 0f, 0f);
+
+        // 手首
+        transform.localRotation = baseRotation * Quaternion.Euler(BasePose.wrist);
     }
 
     private void UpdateSwing()
@@ -100,52 +133,48 @@ public class WeaponSwing : MonoBehaviour
         swingTimer += Time.deltaTime;
         float t = Mathf.Clamp01(swingTimer / swingDuration);
 
-        // イーズアウト
         float eased = 1f - (1f - t) * (1f - t);
 
-        // 2次 Bezier 曲線で補間
-        // 始動 → 経由点 → 終端 を滑らかなカーブで結ぶ
+        // --- 肩: Bezier 曲線 ---
         float oneMinusT = 1f - eased;
-        float currentX = oneMinusT * oneMinusT * poseFrom.x
-                       + 2f * oneMinusT * eased * poseMid.x
-                       + eased * eased * poseTo.x;
-        float currentY = oneMinusT * oneMinusT * poseFrom.y
-                       + 2f * oneMinusT * eased * poseMid.y
-                       + eased * eased * poseTo.y;
+        float currentPitch = oneMinusT * oneMinusT * armFrom.pitch
+                           + 2f * oneMinusT * eased * armMid.pitch
+                           + eased * eased * armTo.pitch;
+        float currentYaw = oneMinusT * oneMinusT * armFrom.yaw
+                         + 2f * oneMinusT * eased * armMid.yaw
+                         + eased * eased * armTo.yaw;
 
-        // Euler ではなく回転を明示的に合成（ジンバルロック回避）
-        // Y回転（左右）→ X回転（前後）の順で適用
-        transform.localRotation =
-            Quaternion.AngleAxis(currentY, Vector3.up) *
-            Quaternion.AngleAxis(currentX, Vector3.right);
+        armR1Pivot.localRotation =
+            Quaternion.AngleAxis(currentYaw, Vector3.up) *
+            Quaternion.AngleAxis(currentPitch, Vector3.right);
+
+        // --- 肘: 振りかぶり(曲げ) → 振り終わり(伸ばし) ---
+        if (armR2Pivot != null)
+        {
+            float elbowAngle = Mathf.Lerp(-40f, -20f, eased);
+            armR2Pivot.localRotation = Quaternion.Euler(elbowAngle, 0f, 0f);
+        }
+
+        // --- 手首: スナップ ---
+        float wristSnap = eased * 80f;
+        transform.localRotation = baseRotation * Quaternion.Euler(
+            BasePose.wrist.x + wristSnap,
+            BasePose.wrist.y,
+            BasePose.wrist.z);
     }
 
     /// <summary>
-    /// NodePosition → 構え角度
-    ///
-    /// 横から見た図（X = ピッチ、正が前方）:
-    ///       x=0   上
-    ///        ↑
-    ///        |
-    ///  Pivot ----→ 前方  x=90
-    ///        |
-    ///        ↓
-    ///       x=180  下
-    ///
-    /// 上から見た図（Y = ヨー、正が右）:
-    ///            前方
-    ///             ↑
-    ///  y=-90 左 ← Pivot → 右 y=90
+    /// NodePosition → 肩の構え角度
     /// </summary>
-    private static SwingPose PositionToPose(NodePosition pos)
+    private static SwingPose PositionToArmPose(NodePosition pos)
     {
         return pos switch
         {
-            NodePosition.Upper => new SwingPose { x = 0f,   y = 0f },
-            NodePosition.Lower => new SwingPose { x = 180f, y = 0f },
-            NodePosition.Left  => new SwingPose { x = 90f,  y = -90f },
-            NodePosition.Right => new SwingPose { x = 90f,  y = 90f },
-            NodePosition.Front => new SwingPose { x = 90f,  y = 0f },
+            NodePosition.Upper => new SwingPose { pitch = -160f, yaw = 0f },
+            NodePosition.Lower => new SwingPose { pitch = -20f,  yaw = 0f },
+            NodePosition.Left  => new SwingPose { pitch = -90f,  yaw = -70f },
+            NodePosition.Right => new SwingPose { pitch = -90f,  yaw = 70f },
+            NodePosition.Front => new SwingPose { pitch = -90f,  yaw = 0f },
             _ => new SwingPose()
         };
     }

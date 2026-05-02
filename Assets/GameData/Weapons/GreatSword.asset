@@ -22,6 +22,23 @@ MonoBehaviour:
   finalNodeDamageMultiplier: 1.5
   backAttackMultiplier: 1
   canStun: 0
+  basePose:
+    body: {x: 10, y: 0, z: 0}
+    armL1: {x: -30, y: 40, z: 0}
+    armL2: {x: -60, y: 40, z: 0}
+    armR1: {x: 15, y: 0, z: 0}
+    armR2: {x: -90, y: 0, z: 0}
+    legL1: {x: 0, y: 0, z: 0}
+    legL2: {x: 0, y: 0, z: 0}
+    legR1: {x: 0, y: 0, z: 0}
+    legR2: {x: 0, y: 0, z: 0}
+    wrist: {x: 0, y: 45, z: -135}
+    armLSwing: 0
+    armRSwing: 0.1
+    legSwing: 1
+  modelScale: {x: 0.15, y: 1.2, z: 0.15}
+  modelOffset: {x: 0, y: 0.8, z: 0}
+  modelColor: {r: 1, g: 1, b: 1, a: 1}
   availableNodes:
   - {fileID: 11400000, guid: b7ddef6fbebc54d73996f281fbdb93f4, type: 2}
   - {fileID: 11400000, guid: e36092225423a48fd868c0a34b292756, type: 2}

@@ -1,202 +1,172 @@
 # プレイヤーモデル & アニメーション
 
 ## 概要
-プレイヤーの体を6パーツのキューブで構成し、移動・戦闘のモーションをコードで制御する
+プレイヤーの体を10パーツのキューブで構成し、武器ごとの基本姿勢・歩行・戦闘モーションをコードで制御する
 
 ---
 
-## キャラクターモデル（6パーツキューブ）
+## キャラクターモデル（10パーツ）
+
+### パーツ一覧
+
+| # | パーツ | 説明 |
+|---|--------|------|
+| 1 | Head | 頭（胴と一体化。胴の子） |
+| 2 | Body | 胴体 |
+| 3 | ArmL1 | 左上腕 |
+| 4 | ArmL2 | 左前腕 |
+| 5 | ArmR1 | 右上腕 |
+| 6 | ArmR2 | 右前腕 |
+| 7 | LegL1 | 左大腿 |
+| 8 | LegL2 | 左下腿 |
+| 9 | LegR1 | 右大腿 |
+| 10 | LegR2 | 右下腿 |
+
+### ピボット配置ルール
+
+- 各パーツの**関節位置**に空オブジェクト（Pivot）を置く
+- パーツの実オブジェクト（Cube）は Pivot の子
+- Pivot を回転させるとパーツが関節を中心に動く
 
 ### オブジェクト階層
 
 ```
 Player（CharacterController）
-├── PlayerModel（空オブジェクト。モデル全体のルート）
-│   ├── Head（Cube）
-│   ├── Body（Cube。胴体）
-│   ├── ArmL_Pivot（空。左肩の位置）
-│   │   └── ArmL（Cube）
-│   ├── ArmR_Pivot（空。右肩の位置）
-│   │   └── ArmR（Cube）
-│   ├── LegL_Pivot（空。左腰の位置）
-│   │   └── LegL（Cube）
-│   └── LegR_Pivot（空。右腰の位置）
-│       └── LegR（Cube）
-└── WeaponPivot（右手先端あたり）
-    └── [武器]（WeaponHolder が生成）
+└── PlayerModel
+    └── Body_Pivot（腰の位置。前傾・後傾の起点）
+        │
+        ├── Body（胴体 Cube）
+        │   ├── Head（頭 Cube。胴と一体化）
+        │   │
+        │   ├── ArmL1_Pivot（左肩。Body に隣接する点）
+        │   │   └── ArmL1（左上腕 Cube）
+        │   │       └── ArmL2_Pivot（左肘。ArmL1 の下端）
+        │   │           └── ArmL2（左前腕 Cube）
+        │   │
+        │   └── ArmR1_Pivot（右肩。Body に隣接する点）
+        │       └── ArmR1（右上腕 Cube）
+        │           └── ArmR2_Pivot（右肘。ArmR1 の下端）
+        │               └── ArmR2（右前腕 Cube）
+        │                   └── WeaponPivot（手先。実行時に武器が生成される）
+        │
+        ├── LegL1_Pivot（左股関節。Body_Pivot に隣接する点）
+        │   └── LegL1（左大腿 Cube）
+        │       └── LegL2_Pivot（左膝。LegL1 の下端）
+        │           └── LegL2（左下腿 Cube）
+        │
+        └── LegR1_Pivot（右股関節。Body_Pivot に隣接する点）
+            └── LegR1（右大腿 Cube）
+                └── LegR2_Pivot（右膝。LegR1 の下端）
+                    └── LegR2（右下腿 Cube）
 ```
 
-### 各パーツのサイズ目安
+### 親子関係のポイント
 
-| パーツ | Scale (X, Y, Z) | Pivot位置の目安 |
-|--------|-----------------|----------------|
-| Head | 0.4, 0.4, 0.4 | Body の上 |
-| Body | 0.5, 0.6, 0.3 | 中心 |
-| Arm | 0.2, 0.5, 0.2 | 肩（Cube上端が肩に来るよう Offset Y:-0.25） |
-| Leg | 0.25, 0.5, 0.25 | 腰（Cube上端が腰に来るよう Offset Y:-0.25） |
+- **腕（ArmL1_Pivot, ArmR1_Pivot）→ Body の子**
+  - 肩は胴体の一部。前傾すると腕も一緒に傾く
+- **脚（LegL1_Pivot, LegR1_Pivot）→ Body_Pivot の子**
+  - 脚は腰から生える。前傾しても脚は真っ直ぐ残る
+- **頭（Head）→ Body の子**
+  - 胴と一体化。将来的に分離して首の動きを入れることも可能
 
-- Pivot は関節位置に置く（回転の原点になる）
-- Cube モデルは Pivot の子にして、Offset で位置調整
-- Collider は見た目用パーツには不要（CharacterController が担当）
+---
+
+## 武器の基本姿勢
+
+### 概要
+武器ごとに「基本姿勢」が定義される。基本姿勢は以下の3レイヤーで構成される。
+
+| レイヤー | 対象 | 例 |
+|---------|------|------|
+| 体 | Body_Pivot の回転 | 前傾・直立 |
+| 腕 | ArmR1/R2 の回転 | 構え方 |
+| 武器 | WeaponPivot の回転（手首） | 刃先の向き |
+
+### 武器別の基本姿勢（イメージ）
+
+| 武器 | 体 | 右腕 | 手首 |
+|------|------|------|------|
+| 大剣 | やや前傾 | 上腕やや前、前腕曲げて肩の高さ | 剣を斜め後方に構える |
+| 短剣 | 直立 | 上腕下げ、前腕軽く曲げ | 逆手 or 順手 |
+| 槌 | やや前傾 | 上腕横、前腕下げ | 柄を握って下に |
+| 棍 | 直立 | 上腕前、前腕上げ | 棍を体の前に立てる |
+| 槍 | やや前傾 | 上腕前、前腕前に伸ばす | 穂先を前方に |
+| 銃 | 直立 | 上腕横、前腕前 | 銃口を前方に |
 
 ---
 
 ## 歩行アニメーション
 
 ### 方針
-マイクラ式。手足を前後に振るだけの簡易アニメーション
+マイクラ式。手足を前後に振るだけの簡易アニメーション。
+体全体は CharacterController による平行移動のみ（上下の揺れなし）。
 
 ### 挙動
-- 体全体は CharacterController による平行移動のみ（上下の揺れなし）
-- 動くのは手足だけ。頭・胴体は動かない
-- 手足は X 軸回転の Sin 波で前後に振る
+- 移動中のみ再生。停止時は現在の角度から基本姿勢へ Lerp で戻る
+- 上腕・大腿を X 軸回転の Sin 波で前後に振る
+- 前腕・下腿も連動して自然な屈伸を加える（膝・肘の曲げ）
 - 右手と左足、左手と右足が同位相（対角ペア）
-- 停止時: その時点の手足の角度から初期姿勢（角度0）へ Lerp で戻る（即座にリセットしない）
-
-```
-  停止時        歩行中（ある瞬間）     停止直後
-
-   [頭]            [頭]                [頭]
-   [胴]            [胴]                [胴]
-  |    |         ＼    ／              ＼  ／  ← Lerp で
-  |    |          |    |               |  |      徐々に戻る
-  |    |         ／    ＼              |  ＼
-```
+- 武器の基本姿勢に応じて振り幅や位相を調整可能
 
 ### パラメータ
 
 | 項目 | 値（仮） | 説明 |
 |------|---------|------|
-| swingAngle | 30° | 手足の最大振り角度 |
+| swingAngle | 30° | 上腕・大腿の最大振り角度 |
 | swingSpeed | 移動速度に比例 | 歩行サイクルの速さ |
-| returnSpeed | 10 | 停止後に初期姿勢へ戻る Lerp 速度 |
-
-### 擬似コード
-```
-if (isMoving)
-{
-    float phase = Time.time * swingSpeed;
-    float angle = sin(phase) * swingAngle;
-
-    armR_target  = +angle;
-    armL_target  = -angle;
-    legR_target  = -angle;
-    legL_target  = +angle;
-}
-else
-{
-    // 停止 → 全パーツ 0° に向かって Lerp
-    armR_target = 0;
-    armL_target = 0;
-    legR_target = 0;
-    legL_target = 0;
-}
-
-// 現在角度からターゲットへ Lerp（移動中も停止後も同じ補間処理）
-armR_current = Lerp(armR_current, armR_target, returnSpeed * dt);
-armL_current = Lerp(armL_current, armL_target, returnSpeed * dt);
-legR_current = Lerp(legR_current, legR_target, returnSpeed * dt);
-legL_current = Lerp(legL_current, legL_target, returnSpeed * dt);
-
-armR_Pivot.localRotation = Euler(armR_current, 0, 0);
-armL_Pivot.localRotation = Euler(armL_current, 0, 0);
-legR_Pivot.localRotation = Euler(legR_current, 0, 0);
-legL_Pivot.localRotation = Euler(legL_current, 0, 0);
-```
+| returnSpeed | 10 | 停止後に基本姿勢へ戻る速度 |
+| elbowBend | 0.4 | 前腕が上腕の振りに追従する比率 |
+| kneeBend | 0.5 | 下腿が大腿の振りに追従する比率 |
 
 ---
 
 ## 戦闘姿勢（コンボ連動）
 
-### AnimationClip はどこまで制御できるか
-
-Unity の AnimationClip はヒエラルキー内の**全 Transform** を制御できる。
-つまり武器の位置回転だけでなく、腕・胴・脚の姿勢も含めて1つのクリップで制御可能。
-
-ただし初期段階では AnimationClip なしのコード駆動で進め、
-必要に応じてクリップで上書きする設計にする。
-
-### コード駆動の戦闘姿勢
-
-ComboNodeData の startPosition / endPosition に応じて、
-武器だけでなくプレイヤーの体パーツにも構えのポーズを設定する。
-
-| NodePosition | 体の姿勢（コード駆動） |
-|---|---|
-| Upper | 両腕を上に上げる。胴体やや後傾 |
-| Lower | 両腕を下に振り下ろす。胴体やや前傾 |
-| Left | 胴体を左にひねる。右腕が左側に |
-| Right | 胴体を右にひねる。右腕が右側に |
-| Front | 突き姿勢。右腕が前方に伸びる |
-
 ### 状態遷移とポーズの流れ
 
 ```
 [Idle]
-  体: 初期姿勢（自然な立ち姿）
-  武器: 待機位置（WeaponSwing.idleRotation）
+  体: 武器の基本姿勢
+  武器: 基本姿勢の手首角度
+  歩行: 基本姿勢ベースで手足を振る
 
     ↓ 攻撃入力
 
 [Active]（motionDuration の間）
-  体: ノードの startPosition の構え → endPosition の構えへ補間
-  武器: WeaponSwing が startPosition → endPosition を Bezier 補間（既存処理）
+  体+腕: startPosition の構え → endPosition の構えへ補間
+  武器: 手首のスナップを加える
+  移動: 不可
 
     ↓ motionDuration 経過
 
 [Recovery]（inputWindowDuration or recoveryDuration の間）
-  体: endPosition の構えで停止（武器も終端位置で停止）
+  体+腕: endPosition の構えで停止
+  武器: 終端角度で停止
+  移動: 不可
 
     ├─ 入力あり → 次ノードの [Active] へ
-    │   体: 現在の endPosition から次ノードの startPosition → endPosition へ
-    │   （前ノードの endPosition = 次ノードの startPosition なので滑らかに繋がる）
+    │   前ノードの endPosition = 次ノードの startPosition なので滑らかに繋がる
     │
     └─ 入力なし or 最終ノード → [Idle] へ
-        体: endPosition の構えから初期姿勢へ Lerp で戻る
-        武器: 終端位置から待機位置へ Slerp で戻る（既存処理）
+        体+腕+武器: 現在の姿勢から基本姿勢へ Lerp で戻る
+        歩行アニメーション復帰
 ```
 
 ### AnimationClip による上書き（将来対応）
 
 ComboNodeData に animationClip フィールドが既にある。
-clip が設定されている場合はコード駆動ポーズを無視し、clip の内容で体と武器を制御する。
+clip が設定されている場合はコード駆動ポーズを無視し、clip で全パーツを制御する。
 clip が null の場合はコード駆動にフォールバック。
-
-```
-if (node.animationClip != null)
-    // AnimationClip で制御（体 + 武器）
-else
-    // コード駆動で制御（NodePosition ベース）
-```
-
----
-
-## WeaponPivot の追従
-
-WeaponPivot は ArmR（右手）の先端に追従させる必要がある。
-体の姿勢が変わると右手の位置も変わるため、WeaponPivot を ArmR の子にするか、
-LateUpdate で ArmR 先端のワールド座標に追従させる。
-
-### 案: ArmR の子にする
-
-```
-ArmR_Pivot
-└── ArmR（Cube）
-    └── WeaponPivot ← ここに配置すれば腕と一緒に動く
-        └── [武器]
-```
-
-この場合、腕が振れば武器も自動で追従する。
-WeaponSwing は WeaponPivot からの相対回転を制御するだけでよい。
 
 ---
 
 ## 実装の優先順
 
-1. 6パーツキューブモデルの組み立て（シーン上で手動 or スクリプト生成）
-2. 歩行アニメーション（PlayerModelAnimator 的なスクリプト）
-3. 戦闘姿勢のコード駆動（NodePosition → 体のポーズ対応）
-4. WeaponPivot を ArmR の子に移動
-5. AnimationClip 上書き対応（後回しでOK）
+1. 10パーツキューブモデルのヒエラルキー構築（Unity Editor 上で手動配置）
+2. 歩行アニメーション（上腕+前腕、大腿+下腿の連動）
+3. 武器ごとの基本姿勢データ定義
+4. WeaponPivot を ArmR2 の子に再配置
+5. 戦闘姿勢のコード駆動（NodePosition → 体+腕のポーズ）
+6. AnimationClip 上書き対応（後回しでOK）
 
 ---
