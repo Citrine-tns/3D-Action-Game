@@ -39,10 +39,10 @@ public class WeaponHolder : MonoBehaviour
             Destroy(currentWeaponObject);
         }
 
-        // 武器ルートオブジェクト（180°反転して腕の延長方向に刃先が来るようにする）
+        // 武器ルートオブジェクト
         currentWeaponObject = new GameObject(weapon.weaponName);
         currentWeaponObject.transform.SetParent(transform, false);
-        currentWeaponObject.transform.localRotation = Quaternion.Euler(80f, 0f, 0f);
+        currentWeaponObject.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
         // 仮モデル（Cylinder: 回転しても見た目の長さが変わらない）
         GameObject model = GameObject.CreatePrimitive(PrimitiveType.Cylinder);

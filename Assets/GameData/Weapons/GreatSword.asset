@@ -32,7 +32,7 @@ MonoBehaviour:
     legL2: {x: 0, y: 0, z: 0}
     legR1: {x: 0, y: 0, z: 0}
     legR2: {x: 0, y: 0, z: 0}
-    wrist: {x: 0, y: 45, z: -135}
+    wrist: {x: 135, y: 135, z: 0}
     armLSwing: 0
     armRSwing: 0.1
     legSwing: 1
@@ -41,5 +41,5 @@ MonoBehaviour:
   modelColor: {r: 1, g: 1, b: 1, a: 1}
   availableNodes:
   - {fileID: 11400000, guid: b7ddef6fbebc54d73996f281fbdb93f4, type: 2}
-  - {fileID: 11400000, guid: e36092225423a48fd868c0a34b292756, type: 2}
-  - {fileID: 11400000, guid: e5065115e015e45fa9c89ae87f3140e0, type: 2}
+  - {fileID: 0}
+  - {fileID: 0}

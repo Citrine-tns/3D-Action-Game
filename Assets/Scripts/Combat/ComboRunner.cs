@@ -20,12 +20,25 @@ public class ComboRunner : MonoBehaviour
     public State CurrentState { get; private set; } = State.Idle;
     public int CurrentNodeIndex { get; private set; } = -1;
     public ComboNodeData CurrentNode =>
-        (currentPreset != null && CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.nodes.Count)
-            ? currentPreset.nodes[CurrentNodeIndex]
+        (currentPreset != null && CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.slots.Count)
+            ? currentPreset.slots[CurrentNodeIndex].node
+            : null;
+    public ComboSlot? CurrentSlot =>
+        (currentPreset != null && CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.slots.Count)
+            ? currentPreset.slots[CurrentNodeIndex]
             : null;
 
     private float stateTimer;
     private bool attackBuffered;
+
+    /// <summary>
+    /// Active 状態の残り時間を延長する（構え遷移の分）。
+    /// </summary>
+    public void ExtendActiveTimer(float extraTime)
+    {
+        if (CurrentState == State.Active)
+            stateTimer += extraTime;
+    }
 
     private void Update()
     {
@@ -62,7 +75,7 @@ public class ComboRunner : MonoBehaviour
     /// </summary>
     public void OnAttackInput()
     {
-        if (currentPreset == null || currentPreset.nodes.Count == 0)
+        if (currentPreset == null || currentPreset.slots.Count == 0)
             return;
 
         switch (CurrentState)
@@ -93,7 +106,7 @@ public class ComboRunner : MonoBehaviour
         int nextIndex = CurrentNodeIndex + 1;
 
         // 最大コンボ数チェック
-        if (nextIndex >= currentPreset.nodes.Count)
+        if (nextIndex >= currentPreset.slots.Count)
         {
             ReturnToIdle();
             return;
@@ -108,13 +121,11 @@ public class ComboRunner : MonoBehaviour
         CurrentState = State.Active;
         stateTimer = CurrentNode.motionDuration / GetSpeedMultiplier();
         attackBuffered = false;
-
-        // TODO: アニメーション再生
     }
 
     private void EnterRecovery()
     {
-        bool isFinalNode = (CurrentNodeIndex >= currentPreset.nodes.Count - 1);
+        bool isFinalNode = (CurrentNodeIndex >= currentPreset.slots.Count - 1);
 
         CurrentState = State.Recovery;
         float speed = GetSpeedMultiplier();
@@ -133,7 +144,6 @@ public class ComboRunner : MonoBehaviour
 
     private float GetSpeedMultiplier()
     {
-        // attackSpeed: 1.0 = 標準, 1.5 = 1.5倍速, 0.6 = 遅い
         return (weapon != null && weapon.attackSpeed > 0f) ? weapon.attackSpeed : 1f;
     }
 
@@ -150,6 +160,6 @@ public class ComboRunner : MonoBehaviour
     public bool IsFinalNode()
     {
         return CurrentNodeIndex >= 0
-            && CurrentNodeIndex >= currentPreset.nodes.Count - 1;
+            && CurrentNodeIndex >= currentPreset.slots.Count - 1;
     }
 }

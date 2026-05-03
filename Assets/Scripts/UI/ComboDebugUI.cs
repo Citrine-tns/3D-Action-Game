@@ -23,7 +23,7 @@ public class ComboDebugUI : MonoBehaviour
         var node = comboRunner.CurrentNode;
         int index = comboRunner.CurrentNodeIndex;
         int total = comboRunner.currentPreset != null
-            ? comboRunner.currentPreset.nodes.Count
+            ? comboRunner.currentPreset.slots.Count
             : 0;
 
         string pos = node != null

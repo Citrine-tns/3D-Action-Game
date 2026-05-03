@@ -5,6 +5,9 @@ using UnityEngine;
 ///
 /// ComboNodeData に animationClip があればそれを再生、
 /// なければコード駆動（Bezier 曲線）でフォールバック。
+///
+/// Idle → 構え遷移（RotateTowards）→ スイング → Recovery → Idle
+/// 遷移中は swingTimer を進めず、遷移完了後にスイング開始。
 /// </summary>
 public class WeaponSwing : MonoBehaviour
 {
@@ -12,6 +15,7 @@ public class WeaponSwing : MonoBehaviour
     private Transform armR1Pivot;
     private Transform armR2Pivot;
     private Quaternion baseRotation;
+    private Quaternion weaponPivotBaseRotation;
     private GameObject playerRoot;
     private ComboRunner.State lastState;
 
@@ -26,6 +30,25 @@ public class WeaponSwing : MonoBehaviour
     private float swingTimer;
     private AnimationClip currentClip;
 
+    // 構えへの遷移用
+    private bool inTransition;
+    public float transitionSpeed = 120f; // 度/秒
+
+    // クリップモード遷移: 全 Transform を保存して crossfade
+    private Transform[] allTransforms;
+    private Quaternion[] preSwingRotations;
+    private Quaternion[] clipStartRotations;
+    private float transitionBlend;
+    private float transitionMaxAngle;
+
+    // コード駆動遷移: 3つの Pivot のみ
+    private Quaternion transitionArmCurrent;
+    private Quaternion transitionElbowCurrent;
+    private Quaternion transitionWristCurrent;
+    private Quaternion transitionArmTarget;
+    private Quaternion transitionElbowTarget;
+    private Quaternion transitionWristTarget;
+
     private struct SwingPose
     {
         public float pitch;
@@ -39,6 +62,12 @@ public class WeaponSwing : MonoBehaviour
         armR2Pivot = elbow;
         playerRoot = player;
         baseRotation = transform.localRotation;
+        weaponPivotBaseRotation = transform.parent.localRotation;
+
+        // 全 Transform のキャッシュ（クリップ crossfade 用）
+        allTransforms = playerRoot.GetComponentsInChildren<Transform>();
+        preSwingRotations = new Quaternion[allTransforms.Length];
+        clipStartRotations = new Quaternion[allTransforms.Length];
 
         ApplyIdlePose();
     }
@@ -65,12 +94,10 @@ public class WeaponSwing : MonoBehaviour
             case ComboRunner.State.Recovery:
                 if (currentClip != null)
                 {
-                    // クリップの最終フレームで保持
                     currentClip.SampleAnimation(playerRoot, currentClip.length);
                 }
                 else
                 {
-                    // コード駆動: 終端位置で保持
                     armR1Pivot.localRotation =
                         Quaternion.AngleAxis(armTo.yaw, Vector3.up) *
                         Quaternion.AngleAxis(armTo.pitch, Vector3.right);
@@ -80,13 +107,18 @@ public class WeaponSwing : MonoBehaviour
                 break;
 
             default:
-                // Idle: 腕は PlayerWalkAnimation に任せる
-                // 武器だけ基本姿勢へ戻す
+                // Idle
                 currentClip = null;
+                inTransition = false;
+                float idleLerp = 10f * Time.deltaTime;
                 transform.localRotation = Quaternion.Slerp(
                     transform.localRotation,
                     baseRotation * Quaternion.Euler(BasePose.wrist),
-                    10f * Time.deltaTime);
+                    idleLerp);
+                transform.parent.localRotation = Quaternion.Slerp(
+                    transform.parent.localRotation,
+                    weaponPivotBaseRotation,
+                    idleLerp);
                 break;
         }
     }
@@ -116,45 +148,151 @@ public class WeaponSwing : MonoBehaviour
 
         if (currentClip != null)
         {
-            // クリップの最初のフレームを適用
-            currentClip.SampleAnimation(playerRoot, 0f);
+            StartSwingClip();
         }
         else
         {
-            // コード駆動: Bezier 用のポーズ計算
-            armFrom = PositionToArmPose(node.startPosition);
-            armTo = PositionToArmPose(node.endPosition);
-
-            armMid = new SwingPose
-            {
-                pitch = -90f,
-                yaw = (armFrom.yaw + armTo.yaw) * 0.5f
-            };
-
-            armR1Pivot.localRotation =
-                Quaternion.AngleAxis(armFrom.yaw, Vector3.up) *
-                Quaternion.AngleAxis(armFrom.pitch, Vector3.right);
-
-            if (armR2Pivot != null)
-                armR2Pivot.localRotation = Quaternion.Euler(-40f, 0f, 0f);
-
-            transform.localRotation = baseRotation * Quaternion.Euler(BasePose.wrist);
+            StartSwingCodeDriven();
         }
+    }
+
+    /// <summary>
+    /// クリップモード: 全 Transform の現在値と目標値を保存。
+    /// SampleAnimation で目標値を取得後、現在値に戻す。
+    /// </summary>
+    private void StartSwingClip()
+    {
+        // 全 Transform の現在値を保存
+        for (int i = 0; i < allTransforms.Length; i++)
+            preSwingRotations[i] = allTransforms[i].localRotation;
+
+        // クリップの0フレーム目をサンプリングして目標値を取得
+        currentClip.SampleAnimation(playerRoot, 0f);
+        transitionMaxAngle = 0f;
+        for (int i = 0; i < allTransforms.Length; i++)
+        {
+            clipStartRotations[i] = allTransforms[i].localRotation;
+            float angle = Quaternion.Angle(preSwingRotations[i], clipStartRotations[i]);
+            if (angle > transitionMaxAngle)
+                transitionMaxAngle = angle;
+        }
+
+        // 全 Transform を元に戻す
+        for (int i = 0; i < allTransforms.Length; i++)
+            allTransforms[i].localRotation = preSwingRotations[i];
+
+        transitionBlend = 0f;
+        inTransition = transitionMaxAngle > 1f;
+
+        // ComboRunner のタイマーに遷移時間を加算
+        if (inTransition && transitionSpeed > 0f)
+            comboRunner.ExtendActiveTimer(transitionMaxAngle / transitionSpeed);
+    }
+
+    /// <summary>
+    /// コード駆動モード: 腕・肘・手首の現在値と目標値を保存。
+    /// </summary>
+    private void StartSwingCodeDriven()
+    {
+        armFrom = PositionToArmPose(comboRunner.CurrentNode.startPosition);
+        armTo = PositionToArmPose(comboRunner.CurrentNode.endPosition);
+
+        armMid = new SwingPose
+        {
+            pitch = -90f,
+            yaw = (armFrom.yaw + armTo.yaw) * 0.5f
+        };
+
+        transitionArmCurrent = armR1Pivot.localRotation;
+        transitionElbowCurrent = (armR2Pivot != null) ? armR2Pivot.localRotation : Quaternion.identity;
+        transitionWristCurrent = transform.localRotation;
+
+        transitionArmTarget =
+            Quaternion.AngleAxis(armFrom.yaw, Vector3.up) *
+            Quaternion.AngleAxis(armFrom.pitch, Vector3.right);
+        transitionElbowTarget = Quaternion.Euler(-40f, 0f, 0f);
+        transitionWristTarget = baseRotation * Quaternion.Euler(BasePose.wrist);
+
+        float maxAngle = Quaternion.Angle(transitionArmCurrent, transitionArmTarget);
+        inTransition = maxAngle > 1f;
+
+        if (inTransition && transitionSpeed > 0f)
+            comboRunner.ExtendActiveTimer(maxAngle / transitionSpeed);
     }
 
     private void UpdateSwing()
     {
-        swingTimer += Time.deltaTime;
-        float t = Mathf.Clamp01(swingTimer / swingDuration);
-
-        if (currentClip != null)
+        if (inTransition)
         {
-            // AnimationClip で再生（クリップの長さを motionDuration に合わせてサンプリング）
-            currentClip.SampleAnimation(playerRoot, t * currentClip.length);
+            if (currentClip != null)
+                UpdateTransitionClip();
+            else
+                UpdateTransitionCodeDriven();
             return;
         }
 
-        // --- コード駆動 ---
+        // --- 遷移完了: スイング本体 ---
+        swingTimer += Time.deltaTime;
+
+        if (currentClip != null)
+        {
+            float t = Mathf.Clamp01(swingTimer / swingDuration);
+            currentClip.SampleAnimation(playerRoot, t * currentClip.length);
+        }
+        else
+        {
+            UpdateSwingCodeDriven();
+        }
+    }
+
+    /// <summary>
+    /// クリップ遷移: 全 Transform を preSwing → clipStart へ crossfade。
+    /// </summary>
+    private void UpdateTransitionClip()
+    {
+        float blendStep = (transitionMaxAngle > 0.01f)
+            ? (transitionSpeed / transitionMaxAngle) * Time.deltaTime
+            : 1f;
+        transitionBlend = Mathf.Clamp01(transitionBlend + blendStep);
+
+        for (int i = 0; i < allTransforms.Length; i++)
+        {
+            allTransforms[i].localRotation = Quaternion.Slerp(
+                preSwingRotations[i],
+                clipStartRotations[i],
+                transitionBlend);
+        }
+
+        if (transitionBlend >= 1f)
+            inTransition = false;
+    }
+
+    /// <summary>
+    /// コード駆動遷移: 腕・肘・手首を RotateTowards。
+    /// </summary>
+    private void UpdateTransitionCodeDriven()
+    {
+        float maxDeg = transitionSpeed * Time.deltaTime;
+
+        transitionArmCurrent = Quaternion.RotateTowards(transitionArmCurrent, transitionArmTarget, maxDeg);
+        transitionElbowCurrent = Quaternion.RotateTowards(transitionElbowCurrent, transitionElbowTarget, maxDeg);
+        transitionWristCurrent = Quaternion.RotateTowards(transitionWristCurrent, transitionWristTarget, maxDeg);
+
+        armR1Pivot.localRotation = transitionArmCurrent;
+        if (armR2Pivot != null)
+            armR2Pivot.localRotation = transitionElbowCurrent;
+        transform.localRotation = transitionWristCurrent;
+
+        if (Quaternion.Angle(transitionArmCurrent, transitionArmTarget) < 1f)
+            inTransition = false;
+    }
+
+    /// <summary>
+    /// コード駆動スイング本体。
+    /// </summary>
+    private void UpdateSwingCodeDriven()
+    {
+        float t = Mathf.Clamp01(swingTimer / swingDuration);
         float eased = 1f - (1f - t) * (1f - t);
 
         float oneMinusT = 1f - eased;
@@ -186,11 +324,16 @@ public class WeaponSwing : MonoBehaviour
     {
         return pos switch
         {
-            NodePosition.Upper => new SwingPose { pitch = -160f, yaw = 0f },
-            NodePosition.Lower => new SwingPose { pitch = -20f,  yaw = 0f },
-            NodePosition.Left  => new SwingPose { pitch = -90f,  yaw = -70f },
-            NodePosition.Right => new SwingPose { pitch = -90f,  yaw = 70f },
-            NodePosition.Front => new SwingPose { pitch = -90f,  yaw = 0f },
+            NodePosition.Upper      => new SwingPose { pitch = -160f, yaw = 0f },
+            NodePosition.UpperRight => new SwingPose { pitch = -140f, yaw = 50f },
+            NodePosition.Right      => new SwingPose { pitch = -90f,  yaw = 70f },
+            NodePosition.LowerRight => new SwingPose { pitch = -40f,  yaw = 50f },
+            NodePosition.Lower      => new SwingPose { pitch = -20f,  yaw = 0f },
+            NodePosition.LowerLeft  => new SwingPose { pitch = -40f,  yaw = -50f },
+            NodePosition.Left       => new SwingPose { pitch = -90f,  yaw = -70f },
+            NodePosition.UpperLeft  => new SwingPose { pitch = -140f, yaw = -50f },
+            NodePosition.Front      => new SwingPose { pitch = -90f,  yaw = 0f },
+            NodePosition.Back       => new SwingPose { pitch = -30f,  yaw = 0f },
             _ => new SwingPose()
         };
     }
