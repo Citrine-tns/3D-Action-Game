@@ -18,6 +18,9 @@ public class ComboRunner : MonoBehaviour
     public WeaponData weapon;
 
     public State CurrentState { get; private set; } = State.Idle;
+
+    /// <summary> WeaponSwing が構え遷移中に true にする。攻撃判定の制御に使う。 </summary>
+    public bool IsInTransition { get; set; }
     public int CurrentNodeIndex { get; private set; } = -1;
     public ComboNodeData CurrentNode =>
         (currentPreset != null && CurrentNodeIndex >= 0 && CurrentNodeIndex < currentPreset.slots.Count)

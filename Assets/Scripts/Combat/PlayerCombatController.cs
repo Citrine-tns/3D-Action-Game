@@ -40,7 +40,8 @@ public class PlayerCombatController : MonoBehaviour
 
         // ComboRunner の状態に応じて Hitbox を切り替え
         if (hitbox == null) return;
-        bool shouldBeActive = comboRunner.CurrentState == ComboRunner.State.Active;
+        bool shouldBeActive = comboRunner.CurrentState == ComboRunner.State.Active
+            && !comboRunner.IsInTransition;
         if (hitbox.gameObject.activeSelf != shouldBeActive)
         {
             hitbox.gameObject.SetActive(shouldBeActive);

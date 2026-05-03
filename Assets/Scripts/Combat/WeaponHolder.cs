@@ -21,6 +21,40 @@ public class WeaponHolder : MonoBehaviour
     private GameObject currentWeaponObject;
     private Hitbox currentHitbox;
 
+    /// <summary>
+    /// エディタ用: 武器のプレビューモデルを生成する。
+    /// Inspector の WeaponHolder コンポーネント右上の ⋮ → Preview Weapon
+    /// </summary>
+    [ContextMenu("Preview Weapon")]
+    private void PreviewWeapon()
+    {
+        RemovePreview();
+        if (combatController == null || combatController.weapon == null) return;
+
+        var weapon = combatController.weapon;
+        currentWeaponObject = new GameObject(weapon.weaponName + " (Preview)");
+        currentWeaponObject.transform.SetParent(transform, false);
+        currentWeaponObject.transform.localRotation = Quaternion.Euler(80f, 0f, 0f);
+
+        GameObject model = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        model.name = "Model";
+        model.transform.SetParent(currentWeaponObject.transform, false);
+        model.transform.localPosition = weapon.modelOffset;
+        model.transform.localScale = weapon.modelScale;
+        DestroyImmediate(model.GetComponent<Collider>());
+        model.GetComponent<Renderer>().material.color = weapon.modelColor;
+    }
+
+    /// <summary>
+    /// エディタ用: プレビューモデルを削除する。
+    /// </summary>
+    [ContextMenu("Remove Preview")]
+    private void RemovePreview()
+    {
+        if (currentWeaponObject != null)
+            DestroyImmediate(currentWeaponObject);
+    }
+
     private void Start()
     {
         if (combatController == null) return;

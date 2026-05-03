@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b48c6d7b0f2c437d9398a9b9b6760c2, type: 3}
-  m_Name: SoaringSwallowSlash_GSowrd
+  m_Name: SoaringSwallowSlash_GSword
   m_EditorClassIdentifier: Assembly-CSharp::ComboNodeData
   nodeName: "\u98DB\u71D5\u65AC\u308A"
   weaponType: 0

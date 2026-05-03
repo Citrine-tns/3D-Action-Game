@@ -31,7 +31,17 @@ public class WeaponSwing : MonoBehaviour
     private AnimationClip currentClip;
 
     // 構えへの遷移用
-    private bool inTransition;
+    private bool _inTransition;
+    private bool inTransition
+    {
+        get => _inTransition;
+        set
+        {
+            _inTransition = value;
+            if (comboRunner != null)
+                comboRunner.IsInTransition = value;
+        }
+    }
     public float transitionSpeed = 180f; // 度/秒
 
     // クリップモード遷移: 全 Transform を保存して crossfade
@@ -63,6 +73,11 @@ public class WeaponSwing : MonoBehaviour
         playerRoot = player;
         baseRotation = transform.localRotation;
         weaponPivotBaseRotation = transform.parent.localRotation;
+
+        // Animator は編集用に残すが、実行時は無効化（SampleAnimation は Animator 不要）
+        var animator = playerRoot.GetComponent<Animator>();
+        if (animator != null)
+            animator.enabled = false;
 
         // 全 Transform のキャッシュ（クリップ crossfade 用）
         allTransforms = playerRoot.GetComponentsInChildren<Transform>();
