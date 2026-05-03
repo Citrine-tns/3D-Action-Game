@@ -16,10 +16,9 @@ MonoBehaviour:
   weaponType: 0
   startPosition: 1
   endPosition: 5
-  followThrough: 0
   damageMultiplier: 1
   motionDuration: 0.5
   recoveryDuration: 0.3
   inputWindowDuration: 0.4
   requiredLevel: 1
-  animationClip: {fileID: 0}
+  animationClip: {fileID: 7400000, guid: 95a0d483ba27942f4984110fab36e6b3, type: 2}

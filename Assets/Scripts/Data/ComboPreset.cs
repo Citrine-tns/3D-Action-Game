@@ -36,7 +36,10 @@ public class ComboPreset : ScriptableObject
             {
                 var prev = slots[i - 1];
                 var curr = slots[i];
-                NodePosition effectiveEnd = prev.followThrough
+
+                // フォロースルーは受け側（curr）に定義
+                // ONの場合、前ノードの終端位置を対角に反転して接続判定
+                NodePosition effectiveEnd = curr.followThrough
                     ? NodePositionHelper.GetOpposite(prev.node.endPosition)
                     : prev.node.endPosition;
 
@@ -51,13 +54,13 @@ public class ComboPreset : ScriptableObject
 
 /// <summary>
 /// コンボプリセット内の1スロット。
-/// ノードの参照 + そのノード後にフォロースルーするかの設定。
+/// ノードの参照 + このノードの前にフォロースルー遷移を入れるかの設定。
 /// </summary>
 [Serializable]
 public struct ComboSlot
 {
     public ComboNodeData node;
 
-    [Tooltip("ONの場合、このノード終了後に武器を体の後ろに回して対角から次に繋ぐ")]
+    [Tooltip("ONの場合、前ノードの終端から体の後ろを経由してこのノードの始動位置へ遷移する")]
     public bool followThrough;
 }

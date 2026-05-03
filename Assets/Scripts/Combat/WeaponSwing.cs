@@ -32,7 +32,7 @@ public class WeaponSwing : MonoBehaviour
 
     // 構えへの遷移用
     private bool inTransition;
-    public float transitionSpeed = 120f; // 度/秒
+    public float transitionSpeed = 180f; // 度/秒
 
     // クリップモード遷移: 全 Transform を保存して crossfade
     private Transform[] allTransforms;
